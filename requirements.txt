@@ -1,0 +1,6 @@
+gymnasium
+numpy
+torch
+torchvision
+stable-baselines3[extra]
+opencv-python
