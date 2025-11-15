@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import os
 import random
 import time
+import zipfile
 from typing import Optional
 
 import numpy as np
@@ -68,6 +70,35 @@ class FloodPolicy:
             return int(random.choice(unexplored))
         # else choose any neighbor
         return int(random.choice([a for (a, nr, nc) in neighbors]))
+
+
+def load_policy_fallback(saved_path: str, env: ActiveExplorerMNISTEnv):
+    """Fallback loader: extract `policy.pth` from the saved SB3 zip and
+    load it into a freshly-instantiated PPO('MlpPolicy', env).
+
+    This avoids using cloudpickle to deserialize objects that reference
+    environment-specific module names (e.g., `numpy._core`).
+    """
+    if PPO is None:
+        raise RuntimeError('stable-baselines3 not available in environment')
+    if not zipfile.is_zipfile(saved_path):
+        raise RuntimeError('Saved policy is not a zip archive')
+    with zipfile.ZipFile(saved_path, 'r') as z:
+        if 'policy.pth' not in z.namelist():
+            raise RuntimeError('policy.pth not found in archive; cannot fallback')
+        data = z.read('policy.pth')
+    state = torch.load(io.BytesIO(data), map_location='cpu')
+    # instantiate model with env to create the architecture
+    model = PPO('MlpPolicy', env, verbose=0)
+    # try to load state directly or under common key
+    try:
+        model.policy.load_state_dict(state)
+    except Exception:
+        if isinstance(state, dict) and 'state_dict' in state:
+            model.policy.load_state_dict(state['state_dict'])
+        else:
+            raise
+    return model
 
 
 def run_episode(env: ActiveExplorerMNISTEnv, policy, render: bool = False):
@@ -128,7 +159,12 @@ def main():
     else:
         if PPO is None:
             raise RuntimeError("stable-baselines3 not available; install it to use a saved policy")
-        policy = PPO.load(args.saved_path)
+        # First try normal SB3 loader (may fail if cloudpickle expects different modules)
+        try:
+            policy = PPO.load(args.saved_path)
+        except Exception as e:
+            print('PPO.load failed, falling back to PyTorch state dict loader:', type(e).__name__, e)
+            policy = load_policy_fallback(args.saved_path, env)
 
     # run episodes and log
     os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)

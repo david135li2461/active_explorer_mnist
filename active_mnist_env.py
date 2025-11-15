@@ -106,7 +106,7 @@ class ActiveExplorerMNISTEnv(gym.Env):
     def __init__(
         self,
         classifier_path: t.Optional[str] = None,
-        confidence_threshold: float = 0.90,
+        confidence_threshold: float = 0.5,
         max_steps: int = 500,
         seed: t.Optional[int] = None,
         mnist_root: str = "./data",
@@ -380,7 +380,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--classifier", type=str, default=None, help="Path to pretrained mnist_cnn.pth state_dict")
-    parser.add_argument("--threshold", type=float, default=0.90)
+    parser.add_argument("--threshold", type=float, default=0.5)
     args = parser.parse_args()
 
     env = ActiveExplorerMNISTEnv(classifier_path=args.classifier, confidence_threshold=args.threshold)
