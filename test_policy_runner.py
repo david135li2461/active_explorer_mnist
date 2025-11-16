@@ -72,6 +72,20 @@ class FloodPolicy:
         return int(random.choice([a for (a, nr, nc) in neighbors]))
 
 
+class RandomPolicy:
+    """Truly random policy: picks uniformly among all 4 actions.
+
+    This policy does not check edges or exploration mask; the environment
+    will clamp position updates as usual.
+    """
+
+    def __init__(self, env: ActiveExplorerMNISTEnv):
+        self.env = env
+
+    def act(self, obs: np.ndarray) -> int:
+        return int(random.choice([0, 1, 2, 3]))
+
+
 def load_policy_fallback(saved_path: str, env: ActiveExplorerMNISTEnv):
     """Fallback loader: extract `policy.pth` from the saved SB3 zip and
     load it into a freshly-instantiated PPO('MlpPolicy', env).
@@ -108,7 +122,8 @@ def run_episode(env: ActiveExplorerMNISTEnv, policy, render: bool = False):
     moves = 0
     # loop until either termination (confidence threshold met) or truncation (time limit)
     while not (terminated or truncated):
-        if isinstance(policy, FloodPolicy):
+        # Support simple policy objects with an `act(obs)` API (FloodPolicy, RandomPolicy)
+        if hasattr(policy, 'act'):
             action = policy.act(obs)
         else:
             # SB3 model
@@ -139,7 +154,7 @@ def run_episode(env: ActiveExplorerMNISTEnv, policy, render: bool = False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--policy", choices=["flood", "saved"], required=True)
+    parser.add_argument("--policy", choices=["flood", "saved", "random"], required=True)
     parser.add_argument("--saved-path", type=str, default=None, help="Path to saved SB3 model (.zip)")
     parser.add_argument("--classifier", type=str, default="./mnist_cnn.pth")
     parser.add_argument("--threshold", type=float, default=0.90)
@@ -156,6 +171,8 @@ def main():
 
     if args.policy == 'flood':
         policy = FloodPolicy(env)
+    elif args.policy == 'random':
+        policy = RandomPolicy(env)
     else:
         if PPO is None:
             raise RuntimeError("stable-baselines3 not available; install it to use a saved policy")
